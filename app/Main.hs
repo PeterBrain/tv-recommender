@@ -1,19 +1,46 @@
 module Main where
 
-import Lib
---import Network.HTTP.Simple
+--import Lib
+--import Data.Char
+import Text.HTML.TagSoup
+import Network.HTTP.Conduit
+import qualified Data.ByteString.Lazy.Char8 as L8
 
 main :: IO ()
 main = do
-	putStrLn "Loading Programm ..."
-
-	--response <- simpleHttp "http://httpbin.org/get"
-	--putStrLn $ "The status code was: " ++ show (getResponseStatusCode response)
-	--print $ getResponseHeader "Content-Type" response
-	--L8.putStrLn $ getResponseBody response
-
-	putStrLn "Got Content! Reading broadcast details ..."
+	getTvProgramme
 	loop
+
+getTvProgramme :: IO ()
+getTvProgramme = do
+	putStrLn "Loading Programm ..."
+	content <- parseTags <$> simpleHttp "https://www.tele.at/tv-programm/2015-im-tv.html?stationType=-1&start=0&limit=5&format=raw"
+	--print content -- prints complete parsed content
+
+	--print $ L8.filter (/='\t') $ L8.filter (/='\n') $ fromTagText $ head $ tail $ dropWhile (~/= TagOpen "" [("class","genre")]) content -- print all (everything)
+
+	--print $ takeWhile (~/= TagOpen "" [("class","bc-item")]) $ dropWhile (~/= TagOpen "" [("class","bc-content-container")]) content -- print one film
+
+	print $ L8.words $ innerText $ takeWhile (~/= TagOpen "" [("class","watchlist add")]) $ dropWhile (~/= TagOpen "" [("class","bc-content genre-marker-5 broadcast genreSelect genreType5")]) content -- print one film
+
+	--print $ filter (~== TagOpen "" [("class","genre")]) content
+	--let content_new = parseTags $ L8.filter (/='\t') $ L8.filter (/='\n') content
+	--L8.putStrLn $ innerText $ dropWhile (~/= "<div class=station>") content_new
+	--L8.putStrLn $ fromTagText $ dropWhile (~/= "<li>") content_new !! 1
+	--let list = fromTagText $ dropWhile (~/= "<li>") content_new
+	--L8.putStrLn $ fromTagText $ dropWhile (~/= "<div class=station>") content !! 1
+	--print $ head $ L8.words $ innerText $ dropWhile (~/= "<div class=genre>") content
+
+	--putStrLn "Got Content! Reading broadcast details ..."
+
+--listTvProgramme = do
+
+-- the channel number (ranging from 1 to length of the program list)
+-- the broadcasting time
+-- the station name
+-- the title of the broadcast followed by its genre (if available)
+--data TvProgramme = TvProgramme {number :: Int, time :: String, station :: String, title :: String, genre :: String, link :: String } deriving (Show, Read, Eq)
+--myEntryAsString = "PhonebookEntry {firstname = \"John\", lastname = \"Doe\", address = \"34 Highstreet\", city = \"Georgetown\", county = \"Kensington\", postal = \"BH32 5TZ\", phone = \"01625-932209\", email = \"jd@test.com\"}"
 
 loop :: IO ()
 loop = do
