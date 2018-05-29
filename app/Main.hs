@@ -7,21 +7,18 @@ import Network.HTTP.Conduit
 import qualified Data.ByteString.Lazy.Char8 as L8
 
 
--- the channel number (ranging from 1 to length of the program list)
--- the broadcasting time
--- the station name
--- the title of the broadcast followed by its genre (if available)
-data TvProgram = TvProgram {
-  number :: String,
-  time :: String,
-  station :: String,
-  title :: String,
-  genre :: String,
-  link :: String} deriving (Read, Eq)--Show,
+data TvProgramEntry = TvProgramEntry {
+  number :: String, -- the channel number (ranging from 1 to length of the program list)
+  time :: String, -- the broadcasting time
+  station :: String, -- the station name
+  title :: String, -- the title of the broadcast followed by
+  genre :: String, -- its genre (if available)
+  link :: String} deriving (Read, Eq) -- Show,
 
-instance Show TvProgram where
+instance Show TvProgramEntry where
   show program = number program ++ ". " ++ time program ++ " " ++ station program ++ "\t" ++ title program ++ ", " ++ genre program ++ "\n"
 
+type TvProgram = [TvProgramEntry]
 
 main :: IO ()
 main = do
@@ -48,22 +45,25 @@ getTvProgram = do
   --parseTvProgram content
   --  | [] resultList = return 1
   --  | (h:t) resultList = parseFunction h : parseTvProgram t
-  print $ map (\x -> L8.filter (/='\t') $ L8.filter (/='\n') $ fromTagText x) $ filter isTagText $ takeWhile (~/= TagOpen "" [("class","watchlist add")]) $ dropWhile (~/= TagOpen "" [("class","bc-content-container")]) content
+
+  let parsedHtml = fmap (\x -> L8.filter (/='\t') $ L8.filter (/='\n') $ fromTagText x) $ filter isTagText $ takeWhile (~/= TagOpen "" [("class","watchlist add")]) $ dropWhile (~/= TagOpen "" [("class","bc-content-container")]) content
+  print $ filter (/="") $ map (L8.unpack) parsedHtml
 
   putStrLn "Got Content! Reading broadcast details ..."
 
 
 listTvProgram :: IO ()
 listTvProgram = do
-  let manually1 = TvProgram {number ="001", time = "20:15-21:45", station = "ORF eins", title = "DOKeins: Bauer unser", genre = "Dokumentarfilm, \195\150/BEL/F 2016", link = ""}
-  let manually2 = TvProgram {number ="002", time = "20:15-21:00", station = "ZDF infokanal", title = "Madame Mao - Aufstieg und Fall der Jiang Qing", genre = "Dokumentation, D 2017", link = ""}
-  let manually3 = TvProgram {number ="003", time = "20:15-21:45", station = "ORF eins", title = "DOKeins: Bauer unser", genre = "Dokumentarfilm, \195\150/BEL/F 2016", link = ""}
-  let manually4 = TvProgram {number ="004", time = "20:15-21:00", station = "ZDF infokanal", title = "Madame Mao - Aufstieg und Fall der Jiang Qing", genre = "Dokumentation, D 2017", link = ""}
-  --let manually5 = [TvProgram {number="001", time= "20:15-21:45", station= "ORF eins", title= "DOKeins: Bauer unser", genre= "Dokumentarfilm, \195\150/BEL/F 2016", link= ""}, TvProgram {number="002", time= "20:15-21:00", station= "ZDF infokanal", title= "Madame Mao - Aufstieg und Fall der Jiang Qing", genre= "Dokumentation, D 2017", link= ""}, TvProgram {number="003", time= "20:15-21:45", station= "ORF eins", title= "DOKeins: Bauer unser", genre= "Dokumentarfilm, \195\150/BEL/F 2016", link= ""}, TvProgram {number="004", time= "20:15-21:00", station= "ZDF infokanal", title= "Madame Mao - Aufstieg und Fall der Jiang Qing", genre= "Dokumentation, D 2017", link= ""}]
-  print manually1
-  print manually2
-  print manually3
-  print manually4
+  --let manually1 = TvProgram {number ="001", time = "20:15-21:45", station = "ORF eins", title = "DOKeins: Bauer unser", genre = "Dokumentarfilm, \195\150/BEL/F 2016", link = ""}
+  --let manually2 = TvProgram {number ="002", time = "20:15-21:00", station = "ZDF infokanal", title = "Madame Mao - Aufstieg und Fall der Jiang Qing", genre = "Dokumentation, D 2017", link = ""}
+  --let manually3 = TvProgram {number ="003", time = "20:15-21:45", station = "ORF eins", title = "DOKeins: Bauer unser", genre = "Dokumentarfilm, \195\150/BEL/F 2016", link = ""}
+  --let manually4 = TvProgram {number ="004", time = "20:15-21:00", station = "ZDF infokanal", title = "Madame Mao - Aufstieg und Fall der Jiang Qing", genre = "Dokumentation, D 2017", link = ""}
+  let manually5 = [TvProgramEntry {number="001", time= "20:15-21:45", station= "ORF eins", title= "DOKeins: Bauer unser", genre= "Dokumentarfilm, \195\150/BEL/F 2016", link= ""}, TvProgramEntry {number="002", time= "20:15-21:00", station= "ZDF infokanal", title= "Madame Mao - Aufstieg und Fall der Jiang Qing", genre= "Dokumentation, D 2017", link= ""}, TvProgramEntry {number="003", time= "20:15-21:45", station= "ORF eins", title= "DOKeins: Bauer unser", genre= "Dokumentarfilm, \195\150/BEL/F 2016", link= ""}, TvProgramEntry {number="004", time= "20:15-21:00", station= "ZDF infokanal", title= "Madame Mao - Aufstieg und Fall der Jiang Qing", genre= "Dokumentation, D 2017", link= ""}]
+  --print manually1
+  --print manually2
+  --print manually3
+  print manually5
+
   loop
 
 
