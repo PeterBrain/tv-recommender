@@ -1,13 +1,21 @@
 module Main where
 
 --import Lib
---import Data.Char
 import System.IO
-import System.IO.Error
-import System.Directory
-import Text.HTML.TagSoup
+import System.IO.Error -- error handling
+import System.Directory -- rename/delte File
+
+import Control.Exception -- error handling global
+import Control.Exception.Base -- error handling global
+
+import Text.HTML.TagSoup -- html/xml parsing
 import Network.HTTP.Conduit
 import qualified Data.ByteString.Lazy.Char8 as L8
+
+
+handler_file_not_found :: IOError -> IO ()
+handler_file_not_found e = do
+    putStrLn "You do not have any favorite actors yet. Please use 'add actor' to add one.\n"
 
 
 data TvProgramEntry = TvProgramEntry {
@@ -23,33 +31,43 @@ data TvProgramEntry = TvProgramEntry {
 --  show program = number program ++ ". " ++ time program ++ " " ++ station program ++ "\t" ++ title program ++ ", " ++ genre program ++ "\n"
 
 printTvProgram :: TvProgramEntry -> IO ()
-printTvProgram program = putStrLn $ number program ++ ". " ++ time program ++ " " ++ station program ++ "\t" ++ title program ++ ", " ++ genre program
+printTvProgram program = putStrLn $ number program ++ ". " ++ time program ++ " " ++ station program ++ "\t\t" ++ title program ++ ", " ++ genre program
 
 
 --main :: IO ()
 main = do
-  putStrLn "Loading Programm ..."
-  loop
+  TvListe <- getTvProgram
+  loop TvListe
 
 
-loop :: IO ()
-loop = do
+loop :: [TvProgramEntry] -> IO ()
+loop TvList = do
   putStrLn "\nPlease enter a command or type 'help' for assistance!"
   command <- getLine
-  let hcommand = words command
-  --if length hcommand == 1 then print command else print $ head hcommand
+  let hcommand = drop 1 $ words command
+  --if (head $ tail hcommand) == "actor" || (head $ tail hcommand) == "actors" then let command2 = head hcommand ++ " " ++ (head $ tail hcommand) else let command2 = head hcommand
+  --command2 hcommand
+  --  | (head $ tail hcommand) == "actor" =
+  --  | (head $ tail hcommand) == "actors" =
+  --if length hcommand == 1 then let command = command else let command = head hcommand
   case command of
-    "list" -> listTvProgram
+    "list" -> do
+      listTvProgram TvList
+      loop TvList
     --"show" -> show
-    --"add actor" -> actorAdd
-    "list actors" -> actorList
-    --"delete actor" -> actorDel
+    --"add actor" -> actorAdd (tail $ tail hcommand)
+    "list actors" -> do
+      actorList
+      loop TvList
+    --"delete actor" -> actorDel (tail $ tail hcommand)
     --"recommend" -> recommend
     "exit" -> putStrLn "Bye!"
-    "help" -> help
+    "help" -> do
+      help
+      loop TvList
     _ -> do
       putStrLn $ "Command '" ++ command ++ "' is unknown!"
-      loop
+      loop TvList
 
 
 help = do
@@ -62,7 +80,6 @@ help = do
   --putStrLn "\t'recommend' ... shows a list of broadcast featuring your favorite actors"
   putStrLn "\t'exit' ... terminate the application"
   putStrLn "\t'help' ... shows this message"
-  loop
 
 
 --getTvProgram :: IO ()
@@ -86,22 +103,23 @@ getTvProgram = do
 
   let splittedHtml = map (map (\x -> L8.filter (/='\t') $ L8.filter (/='\n') $ fromTagText x)) $ map (\x -> filter isTagText $ filter (~/= TagOpen "" [("class","episode")]) $ takeWhile (~/= TagOpen "" [("class","watchlist add")]) $ dropWhile (~/= TagOpen "" [("class","bc-content-container")]) x) $ sections (~== "<div class=bc-item>") content
 
-  let listofprogramms2 = map (\x -> filter (/="") $ map L8.unpack x) splittedHtml
+  let listofprogramms = map (\x -> filter (/="") $ map L8.unpack x) splittedHtml
 
-  let entries = map (\x -> if length x == 6 then TvProgramEntry "000" (x !! 1) (x !! 2) (x !! 3) (x !! 5) "" else TvProgramEntry "000" (x !! 1) (x !! 2) (x !! 3) (x !! 4) "") listofprogramms2
+  let entries = map (\x -> if length x == 6 then TvProgramEntry "001" (x !! 1) (x !! 2) (x !! 3) (x !! 5) "" else TvProgramEntry "001" (x !! 1) (x !! 2) (x !! 3) (x !! 4) "") listofprogramms
   --print entries
-  --listTvProgram entries
   --mapM_ printTvProgram entries
+  putStrLn "Got Content! Reading broadcast details ..."
   return entries
 
-  putStrLn "Got Content! Reading broadcast details ..."
 
-
-listTvProgram :: IO ()
-listTvProgram = do
+listTvProgram :: [TvProgramEntry] -> IO ()
+listTvProgram list = do
   --mapM_ printTvProgram =<< getTvProgram
-  print =<< getTvProgram
-  loop
+  --print =<< getTvProgram
+  --liste <- getTvProgram
+  mapM_ printTvProgram list
+
+
 
 
 find' :: (a->Bool) -> [a] -> Bool
@@ -134,7 +152,6 @@ actorAdd name = do
   hClose handle
   removeFile outFile
   renameFile tempFile outFile
-  loop
 
 
 actorDel :: String -> IO ()
@@ -152,12 +169,8 @@ actorDel name = do
   hClose handle
   removeFile outFile
   renameFile tempFile outFile
-  loop
 
-  `catchIOError` (\_ -> do
-    putStrLn "You do not have any favorite actors yet. Please use 'add actor' to add one."
-    loop
-  )
+  `catch` handler_file_not_found
 
 
 actorList :: IO ()
@@ -168,9 +181,5 @@ actorList = do
   fileContent <- hGetContents handle
   putStrLn $ "\n" ++ fileContent
   hClose handle
-  loop
 
-  `catchIOError` (\_ -> do
-    putStrLn "You do not have any favorite actors yet. Please use 'add actor' to add one."
-    loop
-  )
+  `catch` handler_file_not_found
