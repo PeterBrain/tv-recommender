@@ -8,7 +8,9 @@ import System.Directory -- rename/delte File
 import Control.Exception -- error handling global
 import Control.Exception.Base -- error handling global
 
+import Text.Printf
 import Text.HTML.TagSoup -- html/xml parsing
+
 import Network.HTTP.Conduit
 import qualified Data.ByteString.Lazy.Char8 as L8
 
@@ -19,7 +21,7 @@ handler_file_not_found e = do
 
 
 data TvProgramEntry = TvProgramEntry {
-  number :: String, -- the channel number (ranging from 1 to length of the program list)
+  number :: Int, -- the channel number (ranging from 1 to length of the program list)
   time :: String, -- the broadcasting time
   station :: String, -- the station name
   title :: String, -- the title of the broadcast followed by
@@ -27,47 +29,48 @@ data TvProgramEntry = TvProgramEntry {
   link :: String} deriving (Read, Eq, Show)
 
 
---instance Show TvProgramEntry where
---  show program = number program ++ ". " ++ time program ++ " " ++ station program ++ "\t" ++ title program ++ ", " ++ genre program ++ "\n"
-
 printTvProgram :: TvProgramEntry -> IO ()
-printTvProgram program = putStrLn $ number program ++ ". " ++ time program ++ " " ++ station program ++ "\t\t" ++ title program ++ ", " ++ genre program
+printTvProgram program = printf "%03i. %s %-15s %s, %s\n" (number program) (time program) (station program) (title program) (genre program)
 
 
---main :: IO ()
+main :: IO ()
 main = do
-  TvListe <- getTvProgram
-  loop TvListe
+  hSetEncoding stdin utf8
+  tvListe <- getTvProgram
+  loop tvListe
 
 
 loop :: [TvProgramEntry] -> IO ()
-loop TvList = do
+loop tvList = do
   putStrLn "\nPlease enter a command or type 'help' for assistance!"
-  command <- getLine
-  let hcommand = drop 1 $ words command
-  --if (head $ tail hcommand) == "actor" || (head $ tail hcommand) == "actors" then let command2 = head hcommand ++ " " ++ (head $ tail hcommand) else let command2 = head hcommand
-  --command2 hcommand
-  --  | (head $ tail hcommand) == "actor" =
-  --  | (head $ tail hcommand) == "actors" =
-  --if length hcommand == 1 then let command = command else let command = head hcommand
-  case command of
+  command <- words <$> getLine
+
+  let newCommand = if head command == "show" then head command else unwords $ take 2 command
+
+  case newCommand of
     "list" -> do
-      listTvProgram TvList
-      loop TvList
-    --"show" -> show
-    --"add actor" -> actorAdd (tail $ tail hcommand)
+      listTvProgram tvList
+      loop tvList
+    --"show" -> show (unwords $ tail command)
+    "add actor" -> do
+      actorAdd (unwords $ tail $ tail command)
+      loop tvList
     "list actors" -> do
       actorList
-      loop TvList
-    --"delete actor" -> actorDel (tail $ tail hcommand)
-    --"recommend" -> recommend
+      loop tvList
+    "delete actor" ->do
+      actorDel (unwords $ tail $ tail command)
+      loop tvList
+    --"recommend" -> do
+    --  recommend
+    --  loop tvList
     "exit" -> putStrLn "Bye!"
     "help" -> do
       help
-      loop TvList
+      loop tvList
     _ -> do
-      putStrLn $ "Command '" ++ command ++ "' is unknown!"
-      loop TvList
+      putStrLn $ "Command '" ++ unwords command ++ "' is unknown!"
+      loop tvList
 
 
 help = do
@@ -82,32 +85,24 @@ help = do
   putStrLn "\t'help' ... shows this message"
 
 
---getTvProgram :: IO ()
 getTvProgram = do
   putStrLn "Loading Programm ..."
   content <- parseTags <$> simpleHttp "https://www.tele.at/tv-programm/2015-im-tv.html?stationType=-1&start=0&limit=5&format=raw"
-  --print content -- prints complete parsed content
 
-  --print $ L8.filter (/='\t') $ L8.filter (/='\n') $ fromTagText $ head $ tail $ dropWhile (~/= TagOpen "" [("class","genre")]) content -- print all (everything)
+  let splittedHtml = map (map
+       (L8.filter (/= '\t') . L8.filter (/= '\n') . fromTagText) . (filter isTagText .
+       takeWhile (~/= TagOpen "" [("class", "watchlist add")]) .
+       dropWhile (~/= TagOpen "" [("class", "bc-content-container")]))) $
+       sections (~== "<div class=bc-item>") content
 
-  --print $ takeWhile (~/= TagOpen "" [("class","bc-item")]) $ dropWhile (~/= TagOpen "" [("class","bc-content-container")]) content -- print one film
+  let listOfPrograms = map (\x -> filter (/="") $ map L8.unpack x) splittedHtml
 
-  --print $ L8.words $ innerText $ takeWhile (~/= TagOpen "" [("class","watchlist add")]) $ dropWhile (~/= TagOpen "" [("class","bc-content genre-marker-5 broadcast genreSelect genreType5")]) content -- print one film
+  let entries = map
+       (\x -> if length x == 6 then
+        TvProgramEntry 1 (x !! 1) (x !! 2) (x !! 3) (x !! 5) "" -- skip episode title
+       else
+        TvProgramEntry 1 (x !! 1) (x !! 2) (x !! 3) (x !! 4) "") listOfPrograms
 
-  --parseTvProgram content
-  --  | [] resultList = return 1
-  --  | (h:t) resultList = parseFunction h : parseTvProgram t
-
-  --let parsedHtml = fmap (\x -> L8.filter (/='\t') $ L8.filter (/='\n') $ fromTagText x) $ filter isTagText $ takeWhile (~/= TagOpen "" [("class","watchlist add")]) $ dropWhile (~/= TagOpen "" [("class","bc-content-container")]) content
-  --print $ filter (/="") $ map (L8.unpack) parsedHtml
-
-  let splittedHtml = map (map (\x -> L8.filter (/='\t') $ L8.filter (/='\n') $ fromTagText x)) $ map (\x -> filter isTagText $ filter (~/= TagOpen "" [("class","episode")]) $ takeWhile (~/= TagOpen "" [("class","watchlist add")]) $ dropWhile (~/= TagOpen "" [("class","bc-content-container")]) x) $ sections (~== "<div class=bc-item>") content
-
-  let listofprogramms = map (\x -> filter (/="") $ map L8.unpack x) splittedHtml
-
-  let entries = map (\x -> if length x == 6 then TvProgramEntry "001" (x !! 1) (x !! 2) (x !! 3) (x !! 5) "" else TvProgramEntry "001" (x !! 1) (x !! 2) (x !! 3) (x !! 4) "") listofprogramms
-  --print entries
-  --mapM_ printTvProgram entries
   putStrLn "Got Content! Reading broadcast details ..."
   return entries
 
@@ -116,7 +111,7 @@ listTvProgram :: [TvProgramEntry] -> IO ()
 listTvProgram list = do
   --mapM_ printTvProgram =<< getTvProgram
   --print =<< getTvProgram
-  --liste <- getTvProgram
+  putStrLn ""
   mapM_ printTvProgram list
 
 
