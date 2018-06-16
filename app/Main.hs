@@ -1,3 +1,5 @@
+-- Peter Löcker | Victoria Krusch
+
 module Main where
 
 --import Lib
@@ -14,10 +16,12 @@ import Text.HTML.TagSoup -- html/xml parsing
 import Network.HTTP.Conduit
 import qualified Data.ByteString.Lazy.Char8 as L8
 
+import Control.Parallel.Strategies
+
 
 handler_file_not_found :: IOError -> IO ()
 handler_file_not_found e = do
-    putStrLn "You do not have any favorite actors yet. Please use 'add actor' to add one.\n"
+  putStrLn "You do not have any favorite actors yet. Please use 'add actor' to add one.\n"
 
 
 data TvProgramEntry = TvProgramEntry {
@@ -32,7 +36,7 @@ data TvProgramEntry = TvProgramEntry {
 
 main :: IO ()
 main = do
-  hSetEncoding stdin utf8
+  --hSetEncoding stdin utf8
   tvListe <- mergesortOn station <$> getTvProgram
   loop tvListe
   putStrLn "Bye!"
@@ -51,14 +55,17 @@ loop tvList = do
 
   case newCommand of
     "list" -> do
-      listTvProgram tvList
+      mapM_ printTvProgram tvList
       loop tvList
     "show" -> do
       let indexShow = (read $ unwords $ tail command)
-      if indexShow > length tvList then
-           putStrLn "Something is wrong with the input"
+
+      if indexShow > length tvList || indexShow <= 0 then
+        --putStrLn $ "\x1b[31m" ++ "Please enter a value between 1 and " ++ show (length tvList) ++ "\x1b[0m"
+        putStrLn $ "Please enter a value between 1 and " ++ show (length tvList)
       else
-           showEntry (tvList !! (indexShow - 1))
+        showEntry (tvList !! (indexShow - 1))
+
       loop tvList
     "add actor" -> do
       actorAdd (unwords $ tail $ tail command)
@@ -81,6 +88,7 @@ loop tvList = do
       loop tvList
 
 
+help :: IO ()
 help = do
   putStrLn "\nThis Programm supports the following commands:"
   putStrLn "\t'list' ... shows an overview of all broadcasts"
@@ -94,23 +102,25 @@ help = do
 
 
 parseDescription [] = [""]
-parseDescription list = take 1 $ map fromTagText (filter isTagText $ takeWhile (~/= TagOpen "" [("class", "action-buttons-left")]) $ head list)
+parseDescription list = take 1 $ map fromTagText
+  (filter isTagText $ takeWhile (~/= TagOpen "" [("class", "action-buttons-left")]) $ head list)
 
 
 parseActor [] = [""]
 parseActor [_] = [""]
-parseActor list =
-     fmap (head . take 1 . map fromTagText . filter isTagText) (partitions (~== "<div class=actor>") (list !! 1))
+parseActor list = fmap (head . take 1 . map fromTagText . filter isTagText)
+  (partitions (~== "<div class=actor>") (list !! 1))
 
 
+getDetails :: [String] -> IO [(String, [String])]
 getDetails = linkRec [] where
   linkRec acc [] = return acc
   linkRec acc (h:t) = do
     detailsContent <- parseTags . L8.unpack <$> simpleHttp h
 
-    let splitDetails =
-         fmap (takeWhile (~/= TagOpen "" [("class", "border")])) $
-          partitions (~== "<div class=read-more>") $ dropWhile (~/= TagOpen "" [("class", "long-text")]) detailsContent
+    let splitDetails = fmap (takeWhile (~/= TagOpen "" [("class", "border")])) $
+          partitions (~== "<div class=read-more>") $
+          dropWhile (~/= TagOpen "" [("class", "long-text")]) detailsContent
 
     let actors = parseActor splitDetails
     let description = parseDescription splitDetails
@@ -122,24 +132,25 @@ getDetails = linkRec [] where
 getTvProgram :: IO ([TvProgramEntry])
 getTvProgram = do
   putStrLn "Loading Programm ..."
-  content <- parseTags . L8.unpack <$> simpleHttp "https://www.tele.at/tv-programm/2015-im-tv.html?stationType=-1&start=0&limit=5&format=raw"
+  content <- parseTags . L8.unpack <$> simpleHttp "https://www.tele.at/tv-programm/2015-im-tv.html?stationType=-1&start=0&limit=10&format=raw"
 
   let parsedTele =
-       fmap (
-         fmap (filter (/= '\t') . filter (/= '\n') . fromTagText) .
-         (filter isTagText .
-         takeWhile (~/= TagOpen "" [("class", "watchlist add")]) .
-         dropWhile (~/= TagOpen "" [("class", "bc-content-container")]))
-       ) $ partitions (~== "<div class=bc-item>") content
+        fmap (
+          fmap (filter (/= '\t') . filter (/= '\n') . fromTagText) .
+          (filter isTagText .
+          takeWhile (~/= TagOpen "" [("class", "watchlist add")]) .
+          dropWhile (~/= TagOpen "" [("class", "bc-content-container")]))
+        ) $ partitions (~== "<div class=bc-item>") content
 
-  --let listofprograms = map (filter (/= L8.pack "")) splittedHtml
   let listOfPrograms = map (filter (/= "")) parsedTele
 
   let linkList =
-       fmap (("https://www.tele.at" ++) . (fromAttrib "href" . (!! 1) . filter isTagOpen . takeWhile (~/= TagClose "img") . dropWhile (~/= TagOpen "div" [("class", "image")])))
-          (partitions (~== "<div class=bc-item>") content)
+        fmap (
+          ("https://www.tele.at" ++) . (fromAttrib "href" . (!! 1) . filter isTagOpen .
+          takeWhile (~/= TagClose "img") . dropWhile (~/= TagOpen "div" [("class", "image")]))
+        ) (partitions (~== "<div class=bc-item>") content)
 
-  parsedDetails <- getDetails linkList
+  parsedDetails <- getDetails linkList-- `using` parListChunk 10 rseq
   let details = reverse parsedDetails
 
   let description = map fst details
@@ -150,52 +161,40 @@ getTvProgram = do
   putStrLn "Got Content! Reading broadcast details ..."
   return entries
 
+
+insertData :: [[String]] -> [String] -> [[String]] -> [Int] -> [TvProgramEntry]
 insertData [] _ _ _ = []
 insertData _ [] _ _ = []
 insertData _ _ [] _ = []
-insertData _ _ _ [] = []
+insertData _ _ _ [] = [] -- you can't reach this expression with an infinite list
 insertData (h1:t1) (h2:t2) (h3:t3) (h4:t4) =
-     convertEntry h1 h2 h3 h4 : insertData t1 t2 t3 t4 where
-        convertEntry x y z num
-          | length x >= 6 = TvProgramEntry (num) (x !! 1) (x !! 2) (x !! 3) (x !! 5) y z -- skip episode title
-          | length x == 5 = TvProgramEntry (num) (x !! 1) (x !! 2) (x !! 3) (x !! 4) y z -- skip nothing
-          | otherwise     = TvProgramEntry (num) (x !! 1) (x !! 2) (x !! 3) "" y z -- skip genre
-
---merge :: [a] -> [a] -> [a]
-merge result [] = result
-merge [] result = result
-merge (h1:t1) (h2:t2) = h1 : h2 : merge t1 t2
-
-
-listTvProgram :: [TvProgramEntry] -> IO ()
-listTvProgram list = do
-  --mapM_ printTvProgram =<< getTvProgram
-  --print =<< getTvProgram
-  mapM_ printTvProgram list
+  convertEntry h1 h2 h3 h4 : insertData t1 t2 t3 t4 where
+    convertEntry x y z num
+      | length x >= 6 = TvProgramEntry (num) (x !! 1) (x !! 2) (x !! 3) (x !! 5) y z -- skip episode title
+      | length x == 5 = TvProgramEntry (num) (x !! 1) (x !! 2) (x !! 3) (x !! 4) y z -- skip nothing
+      | otherwise     = TvProgramEntry (num) (x !! 1) (x !! 2) (x !! 3) ""       y z -- skip genre
 
 
 printTvProgram :: TvProgramEntry -> IO ()
 printTvProgram program = printf "%03i. %s %-20s %s, %s\n"
-     (number program) (time program) (station program) (title program) (genre program)
-
-
-printActors [""] = ""
-printActors list = unlines $ map (\x -> "\t- " ++ x) list
+  (number program) (time program) (station program) (title program) (genre program)
 
 
 showEntry :: TvProgramEntry -> IO ()
 showEntry program = printf "\n%s %s (%s)\n%s %s\n\n%s\n\n%s\n%s\n"
-     "Title:" (title program) (genre program)
-     (time program) (station program)
-     (description program)
-     "Actors:" (printActors (actors program))
+  "Title:" (title program) (genre program)
+  (time program) (station program)
+  (description program)
+  "Actors:" (printActors (actors program)) where
+    printActors [""] = ""
+    printActors list = unlines $ map (\x -> "\t- " ++ x) list
 
 
 actorAdd :: String -> IO ()
 actorAdd name = do
   let
-      outFile = "actors.txt"
-      tempFile = "actors.tmp"
+    outFile = "actors.txt"
+    tempFile = "actors.tmp"
 
   fileExist <- doesFileExist outFile
   if not fileExist then writeFile outFile "" else return ()
@@ -219,8 +218,8 @@ actorAdd name = do
 actorDel :: String -> IO ()
 actorDel name = do
   let
-      outFile = "actors.txt"
-      tempFile = "actors.tmp"
+    outFile = "actors.txt"
+    tempFile = "actors.tmp"
 
   handle <- openFile outFile ReadMode
   fileContent <- hGetContents handle
@@ -259,7 +258,7 @@ find' func (h:t)
   | otherwise = find' func t
 
 
-mergesortOn :: Ord b => (TvProgramEntry->b) -> [TvProgramEntry] -> [TvProgramEntry]
+mergesortOn :: Ord a => (TvProgramEntry->a) -> [TvProgramEntry] -> [TvProgramEntry]
 mergesortOn _ [] = []
 mergesortOn _ [h] = [h]
 mergesortOn ext list = merge (mergesortOn ext leftHalf) (mergesortOn ext rightHalf) where
@@ -271,10 +270,19 @@ mergesortOn ext list = merge (mergesortOn ext leftHalf) (mergesortOn ext rightHa
     | otherwise = hr : merge (hl:tl) tr
 
 
---quickSort :: (Ord a) => [a] -> [a]
+quickSort :: Ord a => [a] -> [a]
 quickSort [] = []
 quickSort (h:t) =
   let
     smallSorted = quickSort (filter (<=h) t)
     bigSorted = quickSort (filter (>h) t)
-  in  smallSorted ++ [h] ++ bigSorted
+  in smallSorted ++ [h] ++ bigSorted
+
+
+--quickSort2 :: Ord a => (TvProgramEntry->a) -> [TvProgramEntry] -> [TvProgramEntry]
+--quickSort2 [] = []
+--quickSort2 (h:t) =
+--  let
+--    smallSorted = quickSort2 (filter (<=h) t)
+--    bigSorted = quickSort2 (filter (>h) t)
+--  in smallSorted ++ [h] ++ bigSorted
