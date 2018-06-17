@@ -2,7 +2,9 @@
 
 module Main where
 
---import Lib
+import Data.Char
+import Data.List
+
 import System.IO
 import System.IO.Error -- error handling
 import System.Directory -- rename/delte File
@@ -14,6 +16,8 @@ import Text.Printf
 import Text.HTML.TagSoup -- html/xml parsing
 
 import Network.HTTP.Conduit
+
+import qualified Data.Set as Set
 import qualified Data.ByteString.Lazy.Char8 as L8
 
 import Control.Parallel.Strategies
@@ -76,9 +80,9 @@ loop tvList = do
     "delete actor" -> do
       actorDel (unwords $ tail $ tail command)
       loop tvList
-    --"recommend" -> do
-      --recommend
-      --loop tvList
+    "recommend" -> do
+      recommend tvList
+      loop tvList
     "exit" -> return ()
     "help" -> do
       help
@@ -96,7 +100,7 @@ help = do
   putStrLn "\t'add actor' name ... adds the given name to your list of favorite actors"
   putStrLn "\t'list actors' ... shows a list of all your favorite actors"
   putStrLn "\t'delete actor' name ... removes the given name from your list of favorite actors"
-  --putStrLn "\t'recommend' ... shows a list of broadcast featuring your favorite actors"
+  putStrLn "\t'recommend' ... shows a list of broadcast featuring your favorite actors"
   putStrLn "\t'exit' ... terminate the application"
   putStrLn "\t'help' ... shows this message"
 
@@ -169,10 +173,46 @@ insertData _ _ [] _ = []
 insertData _ _ _ [] = [] -- you can't reach this expression with an infinite list
 insertData (h1:t1) (h2:t2) (h3:t3) (h4:t4) =
   convertEntry h1 h2 h3 h4 : insertData t1 t2 t3 t4 where
-    convertEntry x y z num
-      | length x >= 6 = TvProgramEntry (num) (x !! 1) (x !! 2) (x !! 3) (x !! 5) y z -- skip episode title
-      | length x == 5 = TvProgramEntry (num) (x !! 1) (x !! 2) (x !! 3) (x !! 4) y z -- skip nothing
-      | otherwise     = TvProgramEntry (num) (x !! 1) (x !! 2) (x !! 3) ""       y z -- skip genre
+    convertEntry x y z num = TvProgramEntry (num) (x !! 1) (x !! 2) (x !! 3) (genre x) y z where
+      genre x
+        | length x >= 6 = (x !! 5) -- skip episode title
+        | length x == 5 = (x !! 4) -- skip nothing
+        | otherwise = ""           -- skip genre
+
+
+recommend :: [TvProgramEntry] -> IO ()
+recommend tvList = do
+  let outFile = "actors.txt"
+
+  fileContent <- lines <$> readFile outFile
+
+  let actors = actorListRecommend tvList
+  let a = map Set.fromList actors
+  let b = Set.fromList fileContent
+  --print $ Set.toList $ Set.intersection a b
+  let result = map (Set.toList . Set.intersection b) a
+  let zipped = filterRecommend $ zip tvList (map (intercalate ", ") result)
+
+  mapM_ printRecommend zipped
+  `catch` handler_file_not_found
+
+
+filterRecommend :: [(TvProgramEntry,String)] -> [(TvProgramEntry,String)]
+filterRecommend [] = []
+filterRecommend (h:t)
+  | snd h /= "" = h : filterRecommend t
+  | otherwise = filterRecommend t
+
+
+actorListRecommend :: [TvProgramEntry] -> [[String]]
+actorListRecommend [] = []
+actorListRecommend (h:t) = getAct h : actorListRecommend t where
+  getAct program = actors program
+
+
+printRecommend :: (TvProgramEntry,String) -> IO ()
+printRecommend (program,actors) = printf "%03i. %s %-20s %s (%s %s), %s\n"
+  (number program) (time program) (station program) (title program) "featuring:" (actors) (genre program)
 
 
 printTvProgram :: TvProgramEntry -> IO ()
@@ -244,7 +284,7 @@ actorList = do
   if fileContent == "" then
     handler_file_not_found (userError "")
   else
-    putStrLn $ "\n" ++ (unlines $ quickSort $ lines fileContent)
+    putStrLn $ "\n" ++ (unlines $ quickSortString $ lines fileContent)
 
   hClose handle
 
@@ -279,10 +319,12 @@ quickSort (h:t) =
   in smallSorted ++ [h] ++ bigSorted
 
 
---quickSort2 :: Ord a => (TvProgramEntry->a) -> [TvProgramEntry] -> [TvProgramEntry]
---quickSort2 [] = []
---quickSort2 (h:t) =
---  let
---    smallSorted = quickSort2 (filter (<=h) t)
---    bigSorted = quickSort2 (filter (>h) t)
---  in smallSorted ++ [h] ++ bigSorted
+quickSortString :: [String] -> [String]
+quickSortString [] = []
+quickSortString [h] = [h]
+quickSortString (h:t) =
+  (quickSortString less) ++ (h : equal) ++ (quickSortString greater) where
+    less = filter (\element -> insensitive element h == LT) t -- for descending sort: (h element)
+    equal = filter (\element -> insensitive element h == EQ) t
+    greater = filter (\element -> insensitive element h == GT) t
+    insensitive a b = compare (map toLower a) (map toLower b)
