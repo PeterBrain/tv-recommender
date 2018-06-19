@@ -62,10 +62,13 @@ loop tvList = do
       mapM_ printTvProgram tvList
       loop tvList
     "show" -> do
-      let indexShow = (read $ unwords $ tail command)
+      let indexShow = indexParse command where
+          indexParse (h:t)
+            | null t = -1 -- in case no value is given
+            | (not $ all isDigit (unwords t)) = -1 -- value is not integer
+            | otherwise = (read $ unwords $ tail command)
 
-      if indexShow > length tvList || indexShow <= 0 then
-        --putStrLn $ "\x1b[31m" ++ "Please enter a value between 1 and " ++ show (length tvList) ++ "\x1b[0m"
+      if indexShow > length tvList || indexShow <= 0 then -- check if value smaller than lower, higher than upper bound or zero
         putStrLn $ "Please enter a value between 1 and " ++ show (length tvList)
       else
         showEntry (tvList !! (indexShow - 1))
@@ -161,9 +164,7 @@ getTvProgram = do
   let actors = map snd details
 
   let entriesTEMP = insertData listOfPrograms description actors [1..]
-
   let tvProgramSorted = quickSortTvProgramOn station entriesTEMP
-
   let entries = insertDataFinal tvProgramSorted [1..]
 
   putStrLn "Got Content! Reading broadcast details ..."
@@ -195,18 +196,17 @@ insertDataFinal (h1:t1) (h2:t2) =
 recommend :: [TvProgramEntry] -> IO ()
 recommend tvList = do
   let outFile = "actors.txt"
-
   fileContent <- lines <$> readFile outFile
 
   let actors = map Set.fromList (actorListRecommend tvList)
   let contentList = Set.fromList fileContent
   let result = map (Set.toList . Set.intersection contentList) actors
-  let zipped = filterRecommend $ zip tvList (map (intercalate ", ") result)
+  let zippedResult = filterRecommend $ zip tvList (map (intercalate ", ") result)
 
-  if zipped == [] then
+  if zippedResult == [] then
     putStrLn "There are no recommendations for you today"
   else
-    mapM_ printRecommend zipped
+    mapM_ printRecommend zippedResult
 
   `catch` handler_file_not_found
 
@@ -323,7 +323,7 @@ quickSortString (h:t) =
     insensitive a b = compare (map toLower a) (map toLower b)
 
 
---quickSortTvProgramOn :: Ord a => (TvProgramEntry->String->a) -> [TvProgramEntry] -> [TvProgramEntry]
+--quickSortTvProgramOn :: Ord a => (String->TvProgramEntry->a) -> [TvProgramEntry] -> [TvProgramEntry]
 quickSortTvProgramOn _ [] = []
 quickSortTvProgramOn _ [h] = [h]
 quickSortTvProgramOn onWhat (h:t) =
@@ -332,4 +332,4 @@ quickSortTvProgramOn onWhat (h:t) =
     equal = filter (\element -> insensitive (gettvStation onWhat element) (gettvStation onWhat h) == EQ) t
     greater = filter (\element -> insensitive (gettvStation onWhat element) (gettvStation onWhat h) == GT) t
     insensitive a b = compare (map toLower a) (map toLower b)
-    gettvStation on entrieee = on entrieee
+    gettvStation onWhich programCol = onWhich programCol
