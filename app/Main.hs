@@ -41,7 +41,7 @@ data TvProgramEntry = TvProgramEntry {
 main :: IO ()
 main = do
   --hSetEncoding stdin utf8
-  tvListe <- mergesortOn station <$> getTvProgram
+  tvListe <- getTvProgram
   loop tvListe
   putStrLn "Bye!"
 
@@ -160,7 +160,11 @@ getTvProgram = do
   let description = map fst details
   let actors = map snd details
 
-  let entries = insertData listOfPrograms description actors [1..]
+  let entriesTEMP = insertData listOfPrograms description actors [1..]
+
+  let tvProgramSorted = quickSortTvProgramOn station entriesTEMP
+
+  let entries = insertDataFinal tvProgramSorted [1..]
 
   putStrLn "Got Content! Reading broadcast details ..."
   return entries
@@ -180,20 +184,30 @@ insertData (h1:t1) (h2:t2) (h3:t3) (h4:t4) =
         | otherwise = ""           -- skip genre
 
 
+insertDataFinal :: [TvProgramEntry] -> [Int] -> [TvProgramEntry]
+insertDataFinal [] _ = []
+insertDataFinal _ [] = [] -- you can't reach this expression with an infinite list
+insertDataFinal (h1:t1) (h2:t2) =
+  changeNum h1 h2 : insertDataFinal t1 t2 where
+    changeNum x num = TvProgramEntry (num) (time x) (station x) (title x) (genre x) (description x) (actors x)
+
+
 recommend :: [TvProgramEntry] -> IO ()
 recommend tvList = do
   let outFile = "actors.txt"
 
   fileContent <- lines <$> readFile outFile
 
-  let actors = actorListRecommend tvList
-  let a = map Set.fromList actors
-  let b = Set.fromList fileContent
-  --print $ Set.toList $ Set.intersection a b
-  let result = map (Set.toList . Set.intersection b) a
+  let actors = map Set.fromList (actorListRecommend tvList)
+  let contentList = Set.fromList fileContent
+  let result = map (Set.toList . Set.intersection contentList) actors
   let zipped = filterRecommend $ zip tvList (map (intercalate ", ") result)
 
-  mapM_ printRecommend zipped
+  if zipped == [] then
+    putStrLn "There are no recommendations for you today"
+  else
+    mapM_ printRecommend zipped
+
   `catch` handler_file_not_found
 
 
@@ -298,27 +312,6 @@ find' func (h:t)
   | otherwise = find' func t
 
 
-mergesortOn :: Ord a => (TvProgramEntry->a) -> [TvProgramEntry] -> [TvProgramEntry]
-mergesortOn _ [] = []
-mergesortOn _ [h] = [h]
-mergesortOn ext list = merge (mergesortOn ext leftHalf) (mergesortOn ext rightHalf) where
-  (leftHalf,rightHalf) = splitAt (length list `div` 2) list
-  merge left [] = left
-  merge [] right = right
-  merge (hl:tl) (hr:tr)
-    | (ext hl) < (ext hr) = hl : merge tl (hr:tr)
-    | otherwise = hr : merge (hl:tl) tr
-
-
-quickSort :: Ord a => [a] -> [a]
-quickSort [] = []
-quickSort (h:t) =
-  let
-    smallSorted = quickSort (filter (<=h) t)
-    bigSorted = quickSort (filter (>h) t)
-  in smallSorted ++ [h] ++ bigSorted
-
-
 quickSortString :: [String] -> [String]
 quickSortString [] = []
 quickSortString [h] = [h]
@@ -328,3 +321,15 @@ quickSortString (h:t) =
     equal = filter (\element -> insensitive element h == EQ) t
     greater = filter (\element -> insensitive element h == GT) t
     insensitive a b = compare (map toLower a) (map toLower b)
+
+
+--quickSortTvProgramOn :: Ord a => (TvProgramEntry->String->a) -> [TvProgramEntry] -> [TvProgramEntry]
+quickSortTvProgramOn _ [] = []
+quickSortTvProgramOn _ [h] = [h]
+quickSortTvProgramOn onWhat (h:t) =
+  (quickSortTvProgramOn onWhat less) ++ (h : equal) ++ (quickSortTvProgramOn onWhat greater) where
+    less = filter (\element -> insensitive (gettvStation onWhat element) (gettvStation onWhat h) == LT) t
+    equal = filter (\element -> insensitive (gettvStation onWhat element) (gettvStation onWhat h) == EQ) t
+    greater = filter (\element -> insensitive (gettvStation onWhat element) (gettvStation onWhat h) == GT) t
+    insensitive a b = compare (map toLower a) (map toLower b)
+    gettvStation on entrieee = on entrieee
