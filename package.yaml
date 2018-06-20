@@ -1,6 +1,6 @@
 name:                TVRecommender
 version:             0.1.0.0
-github:              "githubuser/TVRecommender"
+github:              "peterbrain/TVRecommender"
 license:             BSD3
 author:              "Peter Löcker"
 maintainer:          "peter.loecker@live.at"
