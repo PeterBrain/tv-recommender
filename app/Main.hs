@@ -1,4 +1,4 @@
--- Peter Löcker | Victoria Krusch
+-- Peter Löcker | Viktoria Krusch
 
 module Main where
 
@@ -27,6 +27,10 @@ handler_file_not_found :: IOError -> IO ()
 handler_file_not_found e = do
   putStrLn "You do not have any favorite actors yet. Please use 'add actor' to add one.\n"
 
+handler_actor_not_found :: IOError -> IO ()
+handler_actor_not_found e = do
+  putStrLn "Please enter a name of an actor!\n"
+
 
 data TvProgramEntry = TvProgramEntry {
   number :: Int, -- the channel number (ranging from 1 to length of the program list)
@@ -40,7 +44,6 @@ data TvProgramEntry = TvProgramEntry {
 
 main :: IO ()
 main = do
-  --hSetEncoding stdin utf8
   tvListe <- getTvProgram
   loop tvListe
   putStrLn "Bye!"
@@ -65,23 +68,33 @@ loop tvList = do
       let indexShow = indexParse command where
           indexParse (h:t)
             | null t = -1 -- in case no value is given
-            | (not $ all isDigit (unwords t)) = -1 -- value is not integer
+            | (not $ all isDigit (unwords t)) = -1 -- value is not an integer
             | otherwise = (read $ unwords $ tail command)
 
       if indexShow > length tvList || indexShow <= 0 then -- check if value smaller than lower, higher than upper bound or zero
-        putStrLn $ "Please enter a value between 1 and " ++ show (length tvList)
+        putStrLn $ "Please enter a value between 1 and " ++ show (length tvList) ++ "!"
       else
         showEntry (tvList !! (indexShow - 1))
 
       loop tvList
     "add actor" -> do
-      actorAdd (unwords $ tail $ tail command)
+      let actorName = unwords $ tail $ tail command
+      if actorName == "" then
+        handler_actor_not_found (userError "")
+      else
+        actorAdd actorName
+
       loop tvList
     "list actors" -> do
       actorList
       loop tvList
     "delete actor" -> do
-      actorDel (unwords $ tail $ tail command)
+      let actorName = unwords $ tail $ tail command
+      if actorName == "" then
+        handler_file_not_found (userError "")
+      else
+        actorDel actorName
+
       loop tvList
     "recommend" -> do
       recommend tvList
@@ -256,14 +269,9 @@ actorAdd name = do
   handle <- openFile outFile ReadMode
   fileContent <- hGetContents handle
 
-  let
-    append
-      | not checkDouble = fileContent ++ name ++ "\n"
-      | otherwise = fileContent
-    checkDouble = find' (==name) (lines fileContent)
+  let append = unlines $ Set.toList $ Set.insert name (Set.fromList $ lines fileContent)
 
   writeFile tempFile append
-
   hClose handle
   removeFile outFile
   renameFile tempFile outFile
@@ -278,9 +286,9 @@ actorDel name = do
   handle <- openFile outFile ReadMode
   fileContent <- hGetContents handle
 
-  let filterFile = unlines $ filter (/=name) (lines fileContent)
-  writeFile tempFile filterFile
+  let filterFile = unlines $ Set.toList $ Set.delete name (Set.fromList $ lines fileContent)
 
+  writeFile tempFile filterFile
   hClose handle
   removeFile outFile
   renameFile tempFile outFile
@@ -298,25 +306,18 @@ actorList = do
   if fileContent == "" then
     handler_file_not_found (userError "")
   else
-    putStrLn $ "\n" ++ (unlines $ quickSortString $ lines fileContent)
+    putStrLn $ "\n" ++ (unlines $ quickSortActor $ lines fileContent)
 
   hClose handle
 
   `catch` handler_file_not_found
 
 
-find' :: (a->Bool) -> [a] -> Bool
-find' _ [] = False
-find' func (h:t)
-  | func h = True
-  | otherwise = find' func t
-
-
-quickSortString :: [String] -> [String]
-quickSortString [] = []
-quickSortString [h] = [h]
-quickSortString (h:t) =
-  (quickSortString less) ++ (h : equal) ++ (quickSortString greater) where
+quickSortActor :: [String] -> [String]
+quickSortActor [] = []
+quickSortActor [h] = [h]
+quickSortActor (h:t) =
+  (quickSortActor less) ++ (h : equal) ++ (quickSortActor greater) where
     less = filter (\element -> insensitive element h == LT) t -- for descending sort: (h element)
     equal = filter (\element -> insensitive element h == EQ) t
     greater = filter (\element -> insensitive element h == GT) t
