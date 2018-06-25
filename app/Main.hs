@@ -1,7 +1,6 @@
 -- Peter Löcker | Viktoria Krusch
 
-module Main where
-
+--module Main where
 import Data.Char
 import Data.List
 
@@ -152,7 +151,7 @@ getDetails = linkRec [] where
 getTvProgram :: IO ([TvProgramEntry])
 getTvProgram = do
   putStrLn "Loading Programm ..."
-  content <- parseTags . L8.unpack <$> simpleHttp "https://www.tele.at/tv-programm/2015-im-tv.html?stationType=-1&start=0&limit=10&format=raw"
+  content <- parseTags . L8.unpack <$> simpleHttp "https://www.tele.at/tv-programm/2015-im-tv.html?stationType=-1&start=0&format=raw"
 
   let parsedTele =
         fmap (

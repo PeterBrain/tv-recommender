@@ -1,6 +1,6 @@
 name:                TVRecommender
 version:             0.1.0.0
-github:              "peterbrain/TVRecommender"
+github:              "peterbrain/TV-Recommender"
 license:             BSD3
 author:              "Peter Löcker"
 maintainer:          "peter.loecker@live.at"
@@ -17,7 +17,7 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/peterbrain/TVRecommender#readme>
+description:         Please see the README on GitHub at <https://github.com/peterbrain/TV-Recommender#readme>
 
 dependencies:
 - base >= 4.7 && < 5
