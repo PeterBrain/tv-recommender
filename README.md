@@ -35,7 +35,7 @@ One of the most important commands is `help`. Use it and read.
 >> Anyway, feel free to let me know of that bug and pat your shoulder... well done, you did something good for the world
 
 ## Contributions
-Everyone is welcome to __fork__ my project, __improve!__ it and make a pull request. It is up to me whether is merge or not.
+Everyone is welcome to __fork__ my project, __improve__ it and make a pull request. It is up to me whether I merge or not.
 
 ## Credits
 * to myself, I'm genius :P just kidding, everybody is
