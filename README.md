@@ -1,6 +1,8 @@
 # TVRecommender
 TvRecommender lists a bunch of todays prime time TV program from Austria. Based on your favorite actors, it can make recommendations for you.
 
+As from now, this project is not actively maintained anymore. Nevertheless, feel free to contact me.
+
 ## Dependencies
 First of, I have used some external librarys to make my life easier.
 Here is a list of them:
@@ -38,5 +40,5 @@ One of the most important commands is `help`. Use it and read.
 Everyone is welcome to __fork__ my project, __improve__ it and make a pull request. It is up to me whether I merge or not.
 
 ## Credits
-* to myself, I'm genius :P just kidding, everybody is
+* to myself, I'm genius :P __just kidding__, __everybody__ is
 * to [Tele.at](https://www.tele.at/) for providing all the information about the TV program
